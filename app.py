@@ -9,6 +9,32 @@ from selenium.common.exceptions import StaleElementReferenceException, TimeoutEx
 from webdriver_manager.chrome import ChromeDriverManager
 import time
 from datetime import datetime
+def setup_driver():
+
+    options = webdriver.ChromeOptions()
+
+    options.add_argument("--headless=new")
+
+    options.add_argument("--no-sandbox")
+
+    options.add_argument("--disable-dev-shm-usage")
+
+    options.add_argument("--disable-gpu")
+
+    options.add_argument("--window-size=1920x1080")
+
+    # Do NOT hardcode paths
+
+    # service = Service(executable_path="/usr/local/bin/chromedriver")  # REMOVE
+
+    # options.binary_location = "/usr/bin/google-chrome"  # REMOVE
+
+    # Let webdriver_manager install the correct ChromeDriver
+
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+
+    return driver
+ 
 
 # ==================================================================
 # === The "Nuke-Proof" Self-Healing Functions ===
@@ -127,9 +153,21 @@ def perform_automation(username, password, assessment_data):
             wait.until(EC.element_to_be_clickable(suggestion_locator)).click()
             
             wait.until(EC.presence_of_element_located((By.ID, "id_review_mode"))).send_keys('ASSESS_COMPLETION')
+            
             time_input = driver.find_element(By.ID, "id_time_to_enable_review_in_secs")
             time_input.clear()
             time_input.send_keys(str(time_delta_seconds))
+            
+            # === THIS IS THE NEW ACTION YOU REQUESTED ===
+            st.info("Entering the review duration...")
+            # Find the input field by its ID, which is typically 'id_' + field_name
+            duration_input = driver.find_element(By.ID, "id_review_duration_in_secs")
+            duration_input.clear()
+            duration_input.send_keys("86400") # 86400 seconds = 24 hours
+            st.success("✅ Review duration set to 86400.")
+            # ==========================================
+            
+            st.info("Saving the configuration...")
             driver.find_element(By.NAME, "_save").click()
             wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "li.success")))
             st.success("✅ Step 1 complete.")
