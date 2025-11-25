@@ -1,5 +1,4 @@
 import streamlit as st
-import pandas as pd
 import os
 import time
 
@@ -8,7 +7,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
+from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 
 
@@ -22,22 +21,24 @@ def perform_ip_restriction_automation(username, password, assessment_data, cidr_
     # ---------- Setup WebDriver ----------
     try:
         options = webdriver.ChromeOptions()
-        options.add_argument("--headless")
+        options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
-        options.add_argument('--disable-features=NetworkService')
-        options.add_argument('--window-size=1920x1080')
-        options.add_argument('--disable-features=VizDisplayCompositor')
+        options.add_argument("--disable-features=NetworkService")
+        options.add_argument("--window-size=1920x1080")
+        options.add_argument("--disable-features=VizDisplayCompositor")
 
-        if os.path.exists('/usr/bin/chromium'):
-            options.binary_location = '/usr/bin/chromium'
-            service = Service(executable_path='/usr/bin/chromedriver')
+        # Streamlit Cloud environment
+        if os.path.exists("/usr/bin/chromium") and os.path.exists("/usr/bin/chromedriver"):
+            options.binary_location = "/usr/bin/chromium"
+            service = Service("/usr/bin/chromedriver")
         else:
+            # Local environment
             service = Service(ChromeDriverManager().install())
 
         driver = webdriver.Chrome(service=service, options=options)
-        wait = WebDriverWait(driver, 20)
+        wait = WebDriverWait(driver, 60)  # Increased wait to 60 seconds
 
     except Exception as e:
         st.error(f"❌ Failed to start Chrome WebDriver: {e}")
@@ -82,17 +83,15 @@ def perform_ip_restriction_automation(username, password, assessment_data, cidr_
             st.write(f"▶️ Processing {i+1}/{total_ids}: **{assess_id}**")
             st.markdown("<hr>", unsafe_allow_html=True)
 
-            # Step 1: Navigate
+            # Step 1: Navigate to Add Network Config
             add_url = "https://nxtwave-assessments-backend-topin-prod-apis.ccbp.in/admin/nw_assessments_core/orgassessmentnetworkconfig/add/"
             driver.get(add_url)
 
             # Step 2: Select Assessment
             st.info("Selecting Assessment...")
             wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "span[aria-labelledby='select2-id_org_assessment-container']"))).click()
-
             search_box = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "select2-search__field")))
             search_box.send_keys(assess_id[:8])
-
             suggestion = (By.XPATH, f"//li[contains(@class,'select2-results__option') and contains(text(), '{assess_id}')]")
             wait.until(EC.element_to_be_clickable(suggestion)).click()
             st.success("Assessment selected.")
@@ -103,12 +102,17 @@ def perform_ip_restriction_automation(username, password, assessment_data, cidr_
             cidr_box.clear()
             cidr_box.send_keys(cidr_ranges_input)
 
-            # Save
+            # Step 4: Save
             st.info("Saving...")
             driver.find_element(By.NAME, "_continue").click()
 
-            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "li.success")))
-            st.success(f"✅ Successfully saved for {assess_id}")
+            try:
+                wait.until(EC.visibility_of_element_located(
+                    (By.CSS_SELECTOR, "li.success, div.success, ul.success")
+                ))
+                st.success(f"✅ Successfully saved for {assess_id}")
+            except TimeoutException:
+                st.warning(f"⚠️ Could not confirm save for {assess_id}. It may have succeeded anyway.")
 
         except Exception as e:
             st.error(f"❌ Failed for Assessment: {assess_id}")
