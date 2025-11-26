@@ -123,7 +123,7 @@ def perform_ip_restriction_automation(username, password, assessment_data, cidr_
 
     driver.quit()
     st.success("🎉 All tasks completed!")
-    st.balloons()
+    st.snow()
 
 
 # --------------------------------------------------------------------
