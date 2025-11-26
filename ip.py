@@ -42,24 +42,25 @@ def perform_ip_restriction_automation(username, password, assessment_data, cidr_
         options.add_argument("--disable-renderer-backgrounding")
 
         # Cloud environment detection and setup
-        if os.path.exists("/usr/bin/chromium"):
+        # Check for Streamlit Cloud environment first
+        if os.path.exists("/usr/bin/chromedriver") and os.path.exists("/usr/bin/chromium"):
             # Streamlit Cloud / Debian-based systems
-            st.info("Detected cloud environment (Streamlit Cloud)")
+            st.info("✅ Detected Streamlit Cloud environment")
             options.binary_location = "/usr/bin/chromium"
             service = Service("/usr/bin/chromedriver")
-        elif os.path.exists("/usr/bin/google-chrome"):
+        elif os.path.exists("/usr/bin/chromedriver") and os.path.exists("/usr/bin/google-chrome"):
             # Some cloud providers use google-chrome
-            st.info("Detected cloud environment (Google Chrome)")
+            st.info("✅ Detected cloud environment (Google Chrome)")
             options.binary_location = "/usr/bin/google-chrome"
             service = Service("/usr/bin/chromedriver")
         else:
             # Local environment - attempt auto-install
-            st.info("Detected local environment")
+            st.info("🖥️ Detected local environment")
             try:
                 from webdriver_manager.chrome import ChromeDriverManager
                 service = Service(ChromeDriverManager().install())
             except ImportError:
-                st.error("webdriver-manager not found. Install it with: pip install webdriver-manager")
+                st.error("❌ webdriver-manager not found. Install it with: pip install webdriver-manager")
                 return
 
         driver = webdriver.Chrome(service=service, options=options)
@@ -179,8 +180,10 @@ with st.expander("📋 Cloud Deployment Instructions"):
     **2. Create/update `requirements.txt`:**
     ```
     streamlit
-    selenium
+    selenium==4.15.2
     ```
+    
+    **Note:** Do NOT include `webdriver-manager` in requirements.txt for Streamlit Cloud!
     
     **3. Deploy to Streamlit Cloud**
     
