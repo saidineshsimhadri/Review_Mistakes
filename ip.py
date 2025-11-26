@@ -8,7 +8,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from webdriver_manager.chrome import ChromeDriverManager
 
 
 # --------------------------------------------------------------------
@@ -21,27 +20,55 @@ def perform_ip_restriction_automation(username, password, assessment_data, cidr_
     # ---------- Setup WebDriver ----------
     try:
         options = webdriver.ChromeOptions()
+        
+        # Essential cloud-compatible options
         options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
-        options.add_argument("--disable-features=NetworkService")
-        options.add_argument("--window-size=1920x1080")
-        options.add_argument("--disable-features=VizDisplayCompositor")
+        options.add_argument("--disable-software-rasterizer")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-setuid-sandbox")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("--start-maximized")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        
+        # Memory optimizations for cloud
+        options.add_argument("--single-process")
+        options.add_argument("--disable-dev-tools")
+        options.add_argument("--disable-background-timer-throttling")
+        options.add_argument("--disable-backgrounding-occluded-windows")
+        options.add_argument("--disable-renderer-backgrounding")
 
-        # Streamlit Cloud environment
-        if os.path.exists("/usr/bin/chromium") and os.path.exists("/usr/bin/chromedriver"):
+        # Cloud environment detection and setup
+        if os.path.exists("/usr/bin/chromium"):
+            # Streamlit Cloud / Debian-based systems
+            st.info("Detected cloud environment (Streamlit Cloud)")
             options.binary_location = "/usr/bin/chromium"
             service = Service("/usr/bin/chromedriver")
+        elif os.path.exists("/usr/bin/google-chrome"):
+            # Some cloud providers use google-chrome
+            st.info("Detected cloud environment (Google Chrome)")
+            options.binary_location = "/usr/bin/google-chrome"
+            service = Service("/usr/bin/chromedriver")
         else:
-            # Local environment
-            service = Service(ChromeDriverManager().install())
+            # Local environment - attempt auto-install
+            st.info("Detected local environment")
+            try:
+                from webdriver_manager.chrome import ChromeDriverManager
+                service = Service(ChromeDriverManager().install())
+            except ImportError:
+                st.error("webdriver-manager not found. Install it with: pip install webdriver-manager")
+                return
 
         driver = webdriver.Chrome(service=service, options=options)
-        wait = WebDriverWait(driver, 60)  # Increased wait to 60 seconds
+        driver.set_page_load_timeout(60)
+        wait = WebDriverWait(driver, 60)
 
     except Exception as e:
         st.error(f"❌ Failed to start Chrome WebDriver: {e}")
+        st.info("💡 Make sure you have added the necessary packages to packages.txt")
         return
 
     # ---------- LOGIN ----------
@@ -49,6 +76,7 @@ def perform_ip_restriction_automation(username, password, assessment_data, cidr_
         st.info("Navigating to the login page...")
         base_url = "https://nxtwave-assessments-backend-topin-prod-apis.ccbp.in/admin/"
         driver.get(base_url)
+        time.sleep(2)  # Brief pause for page stability
 
         st.info("Entering credentials...")
         wait.until(EC.presence_of_element_located((By.ID, "id_username"))).send_keys(username)
@@ -86,12 +114,14 @@ def perform_ip_restriction_automation(username, password, assessment_data, cidr_
             # Step 1: Navigate to Add Network Config
             add_url = "https://nxtwave-assessments-backend-topin-prod-apis.ccbp.in/admin/nw_assessments_core/orgassessmentnetworkconfig/add/"
             driver.get(add_url)
+            time.sleep(1)  # Allow page to stabilize
 
             # Step 2: Select Assessment
             st.info("Selecting Assessment...")
             wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "span[aria-labelledby='select2-id_org_assessment-container']"))).click()
             search_box = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "select2-search__field")))
             search_box.send_keys(assess_id[:8])
+            time.sleep(0.5)  # Allow search results to load
             suggestion = (By.XPATH, f"//li[contains(@class,'select2-results__option') and contains(text(), '{assess_id}')]")
             wait.until(EC.element_to_be_clickable(suggestion)).click()
             st.success("Assessment selected.")
@@ -120,6 +150,7 @@ def perform_ip_restriction_automation(username, password, assessment_data, cidr_
 
         finally:
             progress_bar.progress((i + 1) / total_ids)
+            time.sleep(0.5)  # Prevent rate limiting
 
     driver.quit()
     st.success("🎉 All tasks completed!")
@@ -133,6 +164,34 @@ def perform_ip_restriction_automation(username, password, assessment_data, cidr_
 st.set_page_config(page_title="IP Restriction Tool", layout="wide")
 st.title("🔐 Turn on IP Restriction Automatically")
 st.warning("Use your secure Django Admin password.", icon="🔒")
+
+# Show deployment instructions
+with st.expander("📋 Cloud Deployment Instructions"):
+    st.markdown("""
+    ### For Streamlit Cloud:
+    
+    **1. Create `packages.txt` in your repo root:**
+    ```
+    chromium
+    chromium-driver
+    ```
+    
+    **2. Create/update `requirements.txt`:**
+    ```
+    streamlit
+    selenium
+    ```
+    
+    **3. Deploy to Streamlit Cloud**
+    
+    ---
+    
+    ### For other cloud platforms (Heroku, Railway, etc.):
+    
+    **Add buildpacks or use Docker with Chrome installed**
+    
+    Docker example available if needed!
+    """)
 
 col1, col2 = st.columns([1, 2])
 
