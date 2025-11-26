@@ -1,7 +1,6 @@
 import os
 import time
 import platform
-import subprocess
 import streamlit as st
 
 from selenium import webdriver
@@ -39,22 +38,45 @@ def get_chrome_driver_setup():
 
     system_os = platform.system()
 
-    # Detect Streamlit Cloud environment
-    if os.path.exists("/usr/bin/chromedriver"):
-        st.info("✅ Detected Cloud Environment (Streamlit Cloud)")
-
-        if os.path.exists("/usr/bin/chromium"):
-            options.binary_location = "/usr/bin/chromium"
-        elif os.path.exists("/usr/bin/google-chrome"):
-            options.binary_location = "/usr/bin/google-chrome"
-        elif os.path.exists("/usr/bin/chromium-browser"):
-            options.binary_location = "/usr/bin/chromium-browser"
-
+    # CRITICAL FIX: Check for cloud environment FIRST before checking OS
+    # Streamlit Cloud is Linux, so we need to check paths before assuming it's "local Linux"
+    
+    st.info("🔍 Checking environment...")
+    
+    # Debug information
+    chromedriver_exists = os.path.exists("/usr/bin/chromedriver")
+    chromium_exists = os.path.exists("/usr/bin/chromium")
+    chrome_exists = os.path.exists("/usr/bin/google-chrome")
+    chromium_browser_exists = os.path.exists("/usr/bin/chromium-browser")
+    
+    st.text(f"OS: {system_os}")
+    st.text(f"/usr/bin/chromedriver: {chromedriver_exists}")
+    st.text(f"/usr/bin/chromium: {chromium_exists}")
+    st.text(f"/usr/bin/google-chrome: {chrome_exists}")
+    st.text(f"/usr/bin/chromium-browser: {chromium_browser_exists}")
+    
+    # Check if we're in a cloud environment with system-installed Chrome/ChromeDriver
+    if chromedriver_exists:
+        st.success("✅ Detected Cloud Environment (System ChromeDriver found)")
         service = Service("/usr/bin/chromedriver")
+        
+        # Set Chrome binary location
+        if chromium_exists:
+            options.binary_location = "/usr/bin/chromium"
+            st.info("Using: /usr/bin/chromium")
+        elif chrome_exists:
+            options.binary_location = "/usr/bin/google-chrome"
+            st.info("Using: /usr/bin/google-chrome")
+        elif chromium_browser_exists:
+            options.binary_location = "/usr/bin/chromium-browser"
+            st.info("Using: /usr/bin/chromium-browser")
+        else:
+            st.warning("⚠️ ChromeDriver found but no Chrome binary found. Trying anyway...")
+        
         return service, options
 
-    # Local System (Windows/Mac)
-    st.info(f"🖥️ Detected Local Environment: {system_os}")
+    # If not cloud, handle local environments (Windows/Mac/Local Linux)
+    st.info(f"🖥️ No system ChromeDriver found. Setting up for local {system_os}...")
 
     try:
         from webdriver_manager.chrome import ChromeDriverManager
@@ -77,7 +99,7 @@ def get_chrome_driver_setup():
                     st.info(f"Found Chrome at: {path}")
                     break
 
-        elif system_os == "Darwin":
+        elif system_os == "Darwin":  # macOS
             chrome_path = (
                 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
             )
@@ -117,10 +139,22 @@ def perform_ip_restriction_automation(
         st.info("💡 Troubleshooting tips:")
         st.markdown(
             """
-            - **Windows**: Make sure Chrome is installed in default location  
-            - **Mac**: Keep Chrome inside /Applications  
-            - **Cloud**: Ensure packages.txt contains chromium & chromium-driver  
-            - Install requirements: `pip install selenium webdriver-manager`
+            **For Streamlit Cloud:**
+            - Make sure `packages.txt` contains exactly:
+              ```
+              chromium
+              chromium-driver
+              ```
+            - Make sure `requirements.txt` contains:
+              ```
+              streamlit
+              selenium==4.15.2
+              ```
+            - Do NOT include `webdriver-manager` in cloud requirements.txt
+            
+            **For Local:**
+            - Install: `pip install selenium webdriver-manager`
+            - Make sure Chrome browser is installed
             """
         )
         return
@@ -176,7 +210,7 @@ def perform_ip_restriction_automation(
 
             driver.get(
                 "https://nxtwave-assessments-backend-topin-prod-apis.ccbp.in/"
-                "admin/nw_assessments_core/orgassessmentnetworkconfig/add"
+                "admin/nw_assessments_core/orgassessmentnetworkconfig/add/"
             )
             time.sleep(1)
 
@@ -260,17 +294,14 @@ with st.expander("📋 Setup Instructions"):
     st.markdown(
         """
         ### Local Setup (Windows/Mac)
-        ```
+        ```bash
         pip install streamlit selenium webdriver-manager
-        ```
-        Run:
-        ```
         streamlit run app.py
         ```
 
         ### Cloud Deployment (Streamlit Cloud)
 
-        **packages.txt**
+        **packages.txt** (create this file in your repo root)
         ```
         chromium
         chromium-driver
@@ -280,8 +311,9 @@ with st.expander("📋 Setup Instructions"):
         ```
         streamlit
         selenium==4.15.2
-        webdriver-manager
         ```
+        
+        ⚠️ **IMPORTANT**: Do NOT include `webdriver-manager` in requirements.txt for cloud deployment!
         """
     )
 
